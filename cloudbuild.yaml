@@ -1,8 +1,0 @@
-steps:
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/assistant-backend:$COMMIT_SHA', '.']
-  # --- ВОТ ГЛАВНОЕ ИСПРАВЛЕНИЕ ---
-  # Говорим Cloud Build перейти в папку backend перед сборкой
-  dir: 'backend'
-images:
-- 'gcr.io/$PROJECT_ID/assistant-backend:$COMMIT_SHA'

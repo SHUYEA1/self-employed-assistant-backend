@@ -1,18 +1,15 @@
 # Dockerfile
 FROM python:3.11-slim
+
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# Меняем рабочую директорию на /app, но внутри папки backend
 WORKDIR /app
 
-# Копируем сначала только requirements.txt для кэширования
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Теперь копируем все остальное из текущей папки (.) в контейнер (/app)
 COPY . .
 
 EXPOSE 8080
-CMD ["gcr.io/$PROJECT_ID/assistant-backend", "." ]
-dir: 'backend'
+CMD ["gunicorn", "backend.wsgi", "--bind", "0.0.0.0:$PORT"]
