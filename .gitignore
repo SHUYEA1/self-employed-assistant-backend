@@ -1,0 +1,19 @@
+# Виртуальное окружение
+venv/
+
+# Папка фронтенда
+frontend/
+
+# Кэш Python
+__pycache__/
+*.pyc
+
+# Файлы IDE
+.vscode/
+.idea/
+
+# Файлы .env с секретами
+.env
+
+# База данных SQLite
+db.sqlite3
