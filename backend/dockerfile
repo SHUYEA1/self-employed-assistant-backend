@@ -1,24 +1,9 @@
-# Файл: backend/Dockerfile (Самая надежная версия)
-
-# Используем официальный образ Python
+# Файл: backend/Dockerfile
 FROM python:3.11-slim
-
-# Устанавливаем переменные окружения для Python
 ENV PYTHONUNBUFFERED True
 ENV PYTHONDONTWRITEBYTECODE True
-
-# Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
-
-# Копируем только файл с зависимостями, чтобы использовать кэширование Docker
 COPY requirements.txt .
-
-# Устанавливаем зависимости
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Копируем ВЕСЬ код бэкенда (из папки, где лежит Dockerfile) в рабочую директорию контейнера
 COPY . .
-
-# Указываем команду для запуска приложения с помощью Gunicorn
-# $PORT будет автоматически предоставлен Cloud Run
 CMD exec gunicorn backend.wsgi:application --bind :$PORT --workers 1 --threads 8 --timeout 0
