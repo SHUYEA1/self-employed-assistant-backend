@@ -1,4 +1,4 @@
-# Файл: E:\self_employed_assistant\Dockerfile (ФИНАЛЬНАЯ ВЕРСИЯ v2)
+# Файл: Dockerfile (Финальная версия с run.sh)
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED True
@@ -6,13 +6,33 @@ ENV PYTHONDONTWRITEBYTECODE True
 
 WORKDIR /app
 
-# --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-# requirements.txt лежит в корне, рядом с Dockerfile, поэтому путь не нужен
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем весь код в контейнер
 COPY . .
 
-# Команда запуска
-CMD exec gunicorn backend.wsgi:application --bind :$PORT --workers 1 --threads 8 --timeout 0
+# Делаем наш стартовый скрипт исполняемым внутри контейнера
+RUN chmod +x /app/run.sh
+
+# Запускаем наш стартовый скрипт
+CMD ["/app/run.sh"]
+```**Шаг 4: Последний деплой**
+1.  Отправь все изменения на GitHub:
+    ```bash
+    # (в терминале для бэкенда)
+    git add .
+    git commit -m "feat: Add entrypoint script to run migrations"
+    git push
+    ```
+2.  Google Cloud Build **автоматически** подхватит изменения, соберет новый образ и задеплоит его.
+
+### Итог
+После того как новый деплой завершится:
+*   Новый контейнер запустится.
+*   Он первым делом выполнит скрипт `run.sh`.
+*   Скрипт выполнит `python manage.py migrate`, и в твоей PostgreSQL базе **создадутся все таблицы**.
+*   Сразу после этого скрипт запустит Gunicorn.
+
+Теперь, когда ты попробуешь зарегистрироваться, `RegisterSerializer` найдет таблицу `auth_user`, успешно создаст пользователя, и ты **увидишь свое приложение**.
+
+**Мы у финишной черты.** Это был последний шаг.

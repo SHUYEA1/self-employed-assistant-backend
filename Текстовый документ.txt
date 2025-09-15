@@ -1,0 +1,13 @@
+FRONTEND_URL https://assistentsaas.web.app
+SECRET_KEY  df8sd9(FGsd0gf)&^sdfSDFs*dfsdfj)_sdfsdf9sdfgASDasd8f7asdfg%gH!
+DATABASE_URL
+
+
+
+
+
+(pXzY#]@%1A37u0>
+assistant1-db
+
+_[^Q#fey<F(l5Hpa
+assistant2-db
