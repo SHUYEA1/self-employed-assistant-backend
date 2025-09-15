@@ -1,9 +1,0 @@
-# Версия для сборки из корня проекта
-FROM python:3.11-slim
-ENV PYTHONUNBUFFERED True
-ENV PYTHONDONTWRITEBYTECODE True
-WORKDIR /app
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-CMD exec gunicorn backend.wsgi:application --bind :$PORT --workers 1 --threads 8 --timeout 0
