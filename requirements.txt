@@ -33,4 +33,11 @@ rsa==4.9.1
 sqlparse==0.5.3
 tzdata==2025.2
 urllib3==2.5.0
+whitenoise==6.10.0
 yarl==1.20.1
+dj-database-url
+Django
+djangorestframework
+gunicorn
+psycopg2-binary
+django-cors-headers
