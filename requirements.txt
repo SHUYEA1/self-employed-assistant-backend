@@ -1,4 +1,3 @@
-# Основные фреймворки
 Django==5.2.6
 djangorestframework==3.16.1
 
@@ -18,3 +17,4 @@ google-auth-oauthlib==1.2.1
 
 # Для переменных окружения и статики в проде
 whitenoise==6.10.0
+python-dotenv
