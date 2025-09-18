@@ -21,6 +21,7 @@ class Client(models.Model):
         verbose_name_plural = "Клиенты"
         ordering = ['name']
 
+
 class Interaction(models.Model):
     class InteractionType(models.TextChoices):
         CALL = 'CALL', 'Звонок'
@@ -41,6 +42,7 @@ class Interaction(models.Model):
         verbose_name_plural = "Взаимодействия"
         ordering = ['-interaction_date']
 
+
 class Transaction(models.Model):
     class TransactionType(models.TextChoices):
         INCOME = 'INC', 'Доход'
@@ -60,6 +62,7 @@ class Transaction(models.Model):
         verbose_name = "Транзакция"
         verbose_name_plural = "Транзакции"
         ordering = ['-transaction_date']
+
 
 class Event(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Пользователь")
