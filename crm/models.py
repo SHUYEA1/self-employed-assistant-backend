@@ -5,6 +5,20 @@ from django.utils.timezone import localdate
 
 User = get_user_model()
 
+class OAuthState(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    state = models.CharField(max_length=128, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class GoogleCredentials(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
+    access_token = models.CharField(max_length=2048)
+    refresh_token = models.CharField(max_length=2048)
+    token_expiry = models.DateTimeField()
+
+    def __str__(self):
+        return f"Google Credentials for {self.user.username}"
+
 class Client(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Ответственный пользователь")
     name = models.CharField(max_length=200, verbose_name="Имя клиента")
@@ -62,20 +76,3 @@ class Transaction(models.Model):
         verbose_name = "Транзакция"
         verbose_name_plural = "Транзакции"
         ordering = ['-transaction_date']
-
-
-class Event(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Пользователь")
-    client = models.ForeignKey(Client, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Клиент")
-    title = models.CharField(max_length=200, verbose_name="Название события")
-    start_time = models.DateTimeField(verbose_name="Время начала")
-    end_time = models.DateTimeField(verbose_name="Время окончания")
-    description = models.TextField(blank=True, verbose_name="Описание")
-
-    def __str__(self):
-        return self.title
-
-    class Meta:
-        verbose_name = "Событие"
-        verbose_name_plural = "События"
-        ordering = ['start_time']

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Client, Interaction, Transaction, Event
+from .models import Client, Interaction, Transaction
 
 User = get_user_model()
 
@@ -27,15 +27,6 @@ class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = ['id', 'user', 'client', 'client_name', 'amount', 'transaction_type', 'description', 'transaction_date']
-        read_only_fields = ['user']
-
-
-class EventSerializer(serializers.ModelSerializer):
-    client_name = serializers.CharField(source='client.name', read_only=True, default=None)
-
-    class Meta:
-        model = Event
-        fields = ['id', 'user', 'client', 'client_name', 'title', 'start_time', 'end_time', 'description']
         read_only_fields = ['user']
 
 
