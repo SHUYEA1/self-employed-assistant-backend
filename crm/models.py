@@ -19,13 +19,49 @@ class GoogleCredentials(models.Model):
     def __str__(self):
         return f"Google Credentials for {self.user.username}"
 
+# --- НОВАЯ МОДЕЛЬ ---
+class Tag(models.Model):
+    """Модель для цветовых меток (тегов)"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Пользователь")
+    name = models.CharField(max_length=50, verbose_name="Название тега")
+    # Храним цвет в формате HEX, например, #FF5733
+    color = models.CharField(max_length=7, default="#808080", verbose_name="Цвет")
+
+    class Meta:
+        verbose_name = "Тег"
+        verbose_name_plural = "Теги"
+        # У одного пользователя не может быть двух тегов с одинаковым названием
+        unique_together = ('user', 'name')
+
+    def __str__(self):
+        return self.name
+
+
 class Client(models.Model):
+    # --- НОВОЕ ПОЛЕ ---
+    class ClientStatus(models.TextChoices):
+        POTENTIAL = 'POT', 'Потенциальный'
+        IN_PROGRESS = 'INP', 'В работе'
+        DONE = 'DON', 'Завершено'
+        CANCELED = 'CAN', 'Отказ'
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Ответственный пользователь")
     name = models.CharField(max_length=200, verbose_name="Имя клиента")
     email = models.EmailField(blank=True, null=True, verbose_name="Email")
     phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Телефон")
     notes = models.TextField(blank=True, verbose_name="Заметки")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    
+    # --- НОВЫЕ ПОЛЯ ---
+    status = models.CharField(
+        max_length=3,
+        choices=ClientStatus.choices,
+        default=ClientStatus.POTENTIAL,
+        verbose_name="Статус клиента"
+    )
+    birthday = models.DateField(blank=True, null=True, verbose_name="Дата рождения")
+    tags = models.ManyToManyField(Tag, blank=True, verbose_name="Теги")
+
 
     def __str__(self):
         return self.name
@@ -76,3 +112,27 @@ class Transaction(models.Model):
         verbose_name = "Транзакция"
         verbose_name_plural = "Транзакции"
         ordering = ['-transaction_date']
+
+
+# --- НОВАЯ МОДЕЛЬ ---
+class TimeEntry(models.Model):
+    """Модель для учета времени"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Пользователь")
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name="Клиент", related_name="time_entries")
+    start_time = models.DateTimeField(verbose_name="Время начала")
+    end_time = models.DateTimeField(blank=True, null=True, verbose_name="Время окончания")
+    description = models.CharField(max_length=255, blank=True, verbose_name="Описание")
+
+    @property
+    def duration_seconds(self):
+        if self.end_time:
+            return (self.end_time - self.start_time).total_seconds()
+        return None
+
+    def __str__(self):
+        return f"Работа по клиенту {self.client.name} ({self.start_time.strftime('%Y-%m-%d')})"
+
+    class Meta:
+        verbose_name = "Запись времени"
+        verbose_name_plural = "Записи времени"
+        ordering = ['-start_time']

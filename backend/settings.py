@@ -2,6 +2,11 @@ from pathlib import Path
 import os
 import dj_database_url
 
+# --- НОВЫЕ ИМПОРТЫ ДЛЯ FIREBASE ---
+import firebase_admin
+from firebase_admin import credentials
+import json
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-super-secret-key-for-local-dev")
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "t")
@@ -88,3 +93,20 @@ REST_FRAMEWORK = {
 }
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+# --- НОВЫЙ БЛОК ДЛЯ ИНИЦИАЛИЗАЦИИ FIREBASE ADMIN SDK ---
+try:
+    firebase_creds_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY_JSON')
+    if firebase_creds_json:
+        firebase_creds_dict = json.loads(firebase_creds_json)
+        cred = credentials.Certificate(firebase_creds_dict)
+        # Проверяем, не было ли уже инициализировано приложение
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+            print("Firebase Admin SDK initialized successfully.")
+        else:
+            print("Firebase Admin SDK already initialized.")
+    else:
+        print("WARNING: FIREBASE_SERVICE_ACCOUNT_KEY_JSON not found. Firebase features will be disabled.")
+except Exception as e:
+    print(f"ERROR: Failed to initialize Firebase Admin SDK: {e}")
