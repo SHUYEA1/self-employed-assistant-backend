@@ -1,10 +1,9 @@
-# Dockerfile на основе официальной документации WeasyPrint
-# https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#docker
+# Dockerfile на основе официальной документации WeasyPrint (ИСПРАВЛЕННЫЙ)
 
 # --- ЭТАП СБОРКИ ---
 FROM debian:bookworm-slim as builder
 
-# Устанавливаем ВСЕ системные зависимости, необходимые для WeasyPrint
+# Устанавливаем ВСЕ системные зависимости, необходимые для WeasyPrint И VENV
 RUN apt-get update && \
     apt-get install -y \
     build-essential \
@@ -13,6 +12,8 @@ RUN apt-get update && \
     python3-setuptools \
     python3-wheel \
     python3-cffi \
+    python3-venv \
+    # <--- ВОТ НЕДОСТАЮЩИЙ ПАКЕТ
     libcairo2-dev \
     libpango1.0-dev \
     libgdk-pixbuf2.0-dev \
@@ -32,7 +33,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # --- ЭТАП РАБОТЫ (ФИНАЛЬНЫЙ КОНТЕЙНЕР) ---
 FROM debian:bookworm-slim
 
-# Устанавливаем только РАБОЧИЕ системные зависимости (без -dev пакетов)
+# Устанавливаем только РАБОЧИЕ системные зависимости
 RUN apt-get update && \
     apt-get install -y \
     python3 \
