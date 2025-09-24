@@ -29,7 +29,7 @@ INSTALLED_APPS = [
     'crm',
     'corsheaders',
     'rest_framework',
-    'rest_framework.autoken',
+    'rest_framework.authtoken',
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
