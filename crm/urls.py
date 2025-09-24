@@ -5,16 +5,20 @@ from .views import (
     FinancialSummaryView, RegisterView,
     GoogleCalendarInitView, GoogleCalendarRedirectView, CheckGoogleAuthView, 
     GoogleCalendarEventListView, GoogleCalendarEventDetailView,
-    
+    UpcomingBirthdaysView,
     # Импортируем новые view
     GoogleLoginView, GoogleContactsListView 
 )
-
+from .views import (
+    ClientViewSet, InteractionViewSet, TransactionViewSet, TagViewSet, TimeEntryViewSet, # <-- Добавили
+    # ...
+)
 router = DefaultRouter()
 router.register(r'clients', ClientViewSet, basename='client')
 router.register(r'interactions', InteractionViewSet, basename='interaction')
 router.register(r'transactions', TransactionViewSet, basename='transaction')
 router.register(r'tags', TagViewSet, basename='tag')
+router.register(r'time-entries', TimeEntryViewSet, basename='timeentry')
 
 # Группируем URL для календаря
 calendar_urls = [
@@ -35,6 +39,7 @@ auth_urls = [
 urlpatterns = [
     # Все роутеры Django REST Framework
     path('', include(router.urls)), 
+    path('clients/birthdays/', UpcomingBirthdaysView.as_view(), name='upcoming-birthdays'),
     
     # Кастомные эндпоинты
     path('finance/summary/', FinancialSummaryView.as_view(), name='finance-summary'),

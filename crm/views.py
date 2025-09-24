@@ -7,25 +7,27 @@ from django.db.models.functions import TruncMonth, TruncDay
 from django.contrib.auth import get_user_model
 from django.shortcuts import redirect
 from django.utils.crypto import get_random_string
-
+import datetime
+from django.db.models import F
 from rest_framework import viewsets, generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, APIException, AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token 
-
-# --- НОВЫЙ ИМПОРТ FIREBASE ---
 from firebase_admin import auth as firebase_auth
-
-# --- Старые импорты Google Auth нужны для Календаря/Контактов ---
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
 from .models import Client, Interaction, Transaction, GoogleCredentials, OAuthState, Tag
+from rest_framework.decorators import action # --- НОВЫЙ ИМПОРТ ---
+from .models import Client, Interaction, Transaction, GoogleCredentials, OAuthState, Tag, TimeEntry # Добавили TimeEntry
+from .serializers import (
+    ClientSerializer, InteractionSerializer, TransactionSerializer,
+    RegisterSerializer, TagSerializer, TimeEntrySerializer # Добавили TimeEntrySerializer
+)
 from .serializers import (
     ClientSerializer, InteractionSerializer, TransactionSerializer,
     RegisterSerializer, TagSerializer
@@ -33,7 +35,74 @@ from .serializers import (
 
 User = get_user_model()
 
+class TimeEntryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet для управления записями времени.
+    """
+    serializer_class = TimeEntrySerializer
 
+    def get_queryset(self):
+        # Пользователь видит только свои записи
+        queryset = TimeEntry.objects.filter(user=self.request.user)
+        
+        # Позволяем фильтровать записи по клиенту (для страницы клиента)
+        client_id = self.request.query_params.get('client_id')
+        if client_id:
+            queryset = queryset.filter(client_id=client_id)
+            
+        return queryset
+
+    def perform_create(self, serializer):
+        # Запрещаем создавать завершенные записи напрямую, только через toggle_timer
+        if serializer.validated_data.get('end_time'):
+            raise PermissionDenied("Cannot create an already completed time entry.")
+        serializer.save(user=self.request.user)
+        
+    @action(detail=False, methods=['post'], url_path='toggle-timer')
+    def toggle_timer(self, request, *args, **kwargs):
+        """
+        Запускает или останавливает таймер для конкретного клиента.
+        Ожидает в теле запроса `client_id`.
+        """
+        client_id = request.data.get('client_id')
+        if not client_id:
+            return Response({'error': 'client_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            client = Client.objects.get(id=client_id, user=request.user)
+        except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+        # Ищем активный (незавершенный) таймер для этого пользователя
+        active_timer = TimeEntry.objects.filter(user=request.user, end_time__isnull=True).first()
+        
+        if active_timer:
+            # Если есть активный таймер, останавливаем его
+            active_timer.end_time = timezone.now()
+            active_timer.save()
+            serializer = self.get_serializer(active_timer)
+            return Response({'status': 'stopped', 'entry': serializer.data})
+        else:
+            # Если активных таймеров нет, запускаем новый для указанного клиента
+            new_timer = TimeEntry.objects.create(
+                user=request.user,
+                client=client,
+                start_time=timezone.now()
+            )
+            serializer = self.get_serializer(new_timer)
+            return Response({'status': 'started', 'entry': serializer.data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='active-timer')
+    def get_active_timer(self, request, *args, **kwargs):
+        """
+        Возвращает информацию о текущем активном таймере, если он есть.
+        """
+        active_timer = TimeEntry.objects.filter(user=request.user, end_time__isnull=True).first()
+        if active_timer:
+            serializer = self.get_serializer(active_timer)
+            return Response(serializer.data)
+        else:
+            return Response(None, status=status.HTTP_200_OK)
 # --- VIEW ДЛЯ ВХОДА ЧЕРЕЗ GOOGLE (ПОЛНОСТЬЮ ПЕРЕПИСАН ПОД FIREBASE) ---
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
@@ -116,11 +185,54 @@ class FinancialSummaryView(APIView):
         all_time_summary = Transaction.objects.filter(user=user).annotate(month=TruncMonth('transaction_date')).values('month').annotate(income=Sum('amount', filter=Q(transaction_type='INC')), expense=Sum('amount', filter=Q(transaction_type='EXP'))).order_by('month')
         this_month_summary = Transaction.objects.filter(user=user, transaction_date__year=datetime.date.today().year, transaction_date__month=datetime.date.today().month).annotate(day=TruncDay('transaction_date')).values('day').annotate(income=Sum('amount', filter=Q(transaction_type='INC')), expense=Sum('amount', filter=Q(transaction_type='EXP'))).order_by('day')
         return Response({'all_time': list(all_time_summary), 'this_month': list(this_month_summary)})
+    
 class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
     permission_classes = (AllowAny,)
     serializer_class = RegisterSerializer
+class UpcomingBirthdaysView(APIView):
+    """
+    Возвращает список клиентов, у которых день рождения в ближайшие 7 дней.
+    """
+    def get(self, request, *args, **kwargs):
+        today = datetime.date.today()
+        # Вычисляем дату через 7 дней
+        in_a_week = today + datetime.timedelta(days=7)
 
+        # Это самая сложная часть. Нам нужно сравнивать только день и месяц.
+        # Мы извлекаем "день года" (число от 1 до 366) для сегодняшней даты
+        # и для дня рождения каждого клиента.
+        today_day_of_year = today.timetuple().tm_yday
+        week_later_day_of_year = in_a_week.timetuple().tm_yday
+
+        # Находим всех клиентов, принадлежащих текущему пользователю, у кого есть дата рождения
+        clients = Client.objects.filter(user=request.user).exclude(birthday__isnull=True)
+        
+        # Аннотируем каждого клиента его "днем года" дня рождения
+        clients = clients.annotate(
+            birthday_day_of_year=Extract('birthday', 'doy')
+        )
+        
+        # Фильтруем. Это немного сложно из-за перехода через Новый Год.
+        if today_day_of_year <= week_later_day_of_year:
+            # Обычный случай (не пересекает 31 декабря)
+            upcoming = clients.filter(
+                birthday_day_of_year__gte=today_day_of_year,
+                birthday_day_of_year__lte=week_later_day_of_year
+            )
+        else:
+            # Случай, когда мы пересекаем Новый Год (например, с 28 декабря по 4 января)
+            upcoming = clients.filter(
+                Q(birthday_day_of_year__gte=today_day_of_year) | # ДР в этом году
+                Q(birthday_day_of_year__lte=week_later_day_of_year)  # ДР в начале следующего года
+            )
+            
+        # Сортируем по "дню года"
+        upcoming = upcoming.order_by('birthday_day_of_year')
+        
+        # Используем наш существующий ClientSerializer для отправки данных
+        serializer = ClientSerializer(upcoming, many=True)
+        return Response(serializer.data)
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/contacts.readonly']
 def get_google_flow():
     client_config = {"web": {"client_id": settings.GOOGLE_CLIENT_ID,"client_secret": settings.GOOGLE_CLIENT_SECRET,"auth_uri": "https://accounts.google.com/o/oauth2/auth","token_uri": "https://oauth2.googleapis.com/token","auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs","redirect_uris": [settings.GOOGLE_REDIRECT_URI],}}

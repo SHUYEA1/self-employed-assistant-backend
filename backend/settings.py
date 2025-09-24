@@ -93,7 +93,18 @@ REST_FRAMEWORK = {
 }
 
 CORS_ALLOW_ALL_ORIGINS = True
-
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication'
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated'
+    ],
+    # --- НОВЫЙ БЛОК ДЛЯ ПАГИНАЦИИ ---
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 100 # Можно выбрать любое число, 100 - хороший дефолт для списка
+}
 # --- НОВЫЙ БЛОК ДЛЯ ИНИЦИАЛИЗАЦИИ FIREBASE ADMIN SDK ---
 try:
     firebase_creds_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY_JSON')

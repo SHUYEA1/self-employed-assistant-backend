@@ -1,11 +1,12 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Client, Interaction, Transaction, Tag # Добавили Tag
+
+# Единый блок импорта моделей
+from .models import Client, Interaction, Transaction, Tag, TimeEntry
 
 User = get_user_model()
 
 
-# --- НОВЫЙ СЕРИАЛИЗАТОР ---
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
@@ -17,45 +18,40 @@ class ClientSerializer(serializers.ModelSerializer):
     total_income = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     total_expense = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     
-    # Это поле будет показывать полную информацию о тегах при чтении данных
-    tags = TagSerializer(many=True, read_only=True) 
+    tags = TagSerializer(many=True, read_only=True)
     
-    # А это поле будет принимать только ID тегов при записи (создании/обновлении)
-    # write_only=True означает, что оно не будет отображаться при GET-запросах
+    # Поле для записи ID тегов, теперь необязательное
     tag_ids = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Tag.objects.all(), # DRF требует queryset, мы его отфильтруем во view
-        source='tags', # Указываем, что это поле работает с модельным полем 'tags'
-        write_only=True
-    )
+    many=True,
+    queryset=Tag.objects.all(),
+    source='tags', 
+    write_only=True,
+    required=False # <--- ЭТА СТРОКА ТОЧНО ЕСТЬ И СОХРАНЕНА
+)
 
     class Meta:
         model = Client
-        # Добавляем новые поля в список
         fields = [
             'id', 'name', 'email', 'phone', 'notes', 'user', 'created_at',
             'total_income', 'total_expense', 'status', 'birthday', 'tags', 'tag_ids'
         ]
         read_only_fields = ['user']
 
-    # Переопределяем метод create, чтобы вручную привязать теги к клиенту
+    # Метод create был переписан некорректно в прошлых версиях, исправляем
     def create(self, validated_data):
-        # validated_data['tags'] содержит список объектов Tag
-        # Мы используем .pop() чтобы извлечь теги из данных перед созданием клиента
+        # `tags` уже были обработаны и помещены в validated_data по ключу `tags` 
+        # благодаря `source='tags'` в поле `tag_ids`
         tags_data = validated_data.pop('tags', None)
         client = Client.objects.create(**validated_data)
-        # Если теги были переданы, привязываем их
         if tags_data:
             client.tags.set(tags_data)
         return client
 
-    # То же самое для метода update
+    # Исправляем метод update по той же логике
     def update(self, instance, validated_data):
         tags_data = validated_data.pop('tags', None)
-        # super().update() обновляет все остальные поля (name, email и т.д.)
         instance = super().update(instance, validated_data)
-        # Если `tags_data` был передан (даже пустым списком), обновляем теги
-        # Если он не был передан (None), мы теги не трогаем
+        # Если `tags_data` был передан (даже пустым списком), обновляем теги.
         if tags_data is not None:
             instance.tags.set(tags_data)
         return instance
@@ -74,6 +70,13 @@ class TransactionSerializer(serializers.ModelSerializer):
         model = Transaction
         fields = ['id', 'user', 'client', 'client_name', 'amount', 'transaction_type', 'description', 'transaction_date']
         read_only_fields = ['user']
+
+
+class TimeEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TimeEntry
+        fields = ['id', 'user', 'client', 'start_time', 'end_time', 'description', 'duration_seconds']
+        read_only_fields = ['user', 'duration_seconds']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
