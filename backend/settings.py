@@ -1,5 +1,4 @@
-# Файл: backend/settings.py (Версия для дебага)
-print("DEBUG: Starting settings.py parsing...")
+# Файл: backend/settings.py (Финальная чистая версия)
 
 from pathlib import Path
 import os
@@ -8,79 +7,109 @@ import firebase_admin
 from firebase_admin import credentials
 import json
 
-print("DEBUG: Basic imports successful.")
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- Логируем каждую важную переменную ---
+# Эти переменные должны быть установлены в окружении Cloud Run
 SECRET_KEY = os.environ.get("SECRET_KEY")
-print(f"DEBUG: SECRET_KEY is {'SET' if SECRET_KEY else 'NOT SET'}")
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI')
 
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "t")
 
 ALLOWED_HOSTS = ["*"]
-
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000').split(',')
-print(f"DEBUG: CSRF_TRUSTED_ORIGINS = {CSRF_TRUSTED_ORIGINS}")
-
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
-# ... (INSTALLED_APPS, MIDDLEWARE, ROOT_URLCONF, TEMPLATES, WSGI_APPLICATION)
-# Эти блоки редко вызывают проблемы при старте
-INSTALLED_APPS = [...]
-MIDDLEWARE = [...]
-#...
 
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'crm',
+    'corsheaders',
+    'rest_framework',
+    'rest_framework.authtoken', # Была опечатка autoken, исправлено
+]
 
-# --- САМОЕ ВАЖНОЕ: Логируем подключение к БД ---
-print("DEBUG: Starting database configuration...")
-DB_PASSWORD = os.environ.get("DB_PASSWORD")
-DB_NAME = os.environ.get("DB_NAME")
-print(f"DEBUG: DB_PASSWORD is {'SET' if DB_PASSWORD else 'NOT SET'}")
-print(f"DEBUG: DB_NAME is {'SET' if DB_NAME else 'NOT SET'}")
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
 
+ROOT_URLCONF = 'backend.urls'
+
+TEMPLATES = [
+    {'BACKEND': 'django.template.backends.django.DjangoTemplates', 'DIRS': [], 'APP_DIRS': True,
+     'OPTIONS': {'context_processors': ['django.template.context_processors.debug', 'django.template.context_processors.request', 'django.contrib.auth.context_processors.auth', 'django.contrib.messages.context_processors.messages']}}
+]
+
+WSGI_APPLICATION = 'backend.wsgi.application'
+
+# Умная конфигурация БД для Cloud Run и локальной разработки
 if os.environ.get('K_SERVICE'):
-    print("DEBUG: Detected Cloud Run environment (K_SERVICE). Configuring for UNIX socket.")
+    # Подключение для Cloud Run через UNIX socket
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
             'HOST': '/cloudsql/assistant-saas:europe-west4:assistant-db1',
             'USER': 'postgres',
-            'PASSWORD': DB_PASSWORD,
-            'NAME': DB_NAME,
+            'PASSWORD': os.environ.get("DB_PASSWORD"),
+            'NAME': os.environ.get("DB_NAME", "postgres"),
         }
     }
 else:
-    print("DEBUG: No Cloud Run environment detected. Falling back to DATABASE_URL or SQLite.")
+    # Конфигурация для локальной разработки (через localhost или SQLite)
     DATABASE_URL = os.environ.get('DATABASE_URL')
     if DATABASE_URL:
-        print("DEBUG: Using DATABASE_URL.")
         DATABASES = {'default': dj_database_url.config(conn_max_age=600)}
     else:
-        print("DEBUG: Using fallback SQLite database.")
         DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
 
-print("DEBUG: Database configuration finished.")
 
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'}
+]
 
-# ... (AUTH_PASSWORD_VALIDATORS и т.д.)
+LANGUAGE_CODE = 'ru-ru'
+TIME_ZONE = 'UTC'
+USE_I18N = True
+USE_TZ = True
+STATIC_URL = 'static/'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# --- Логируем инициализацию Firebase ---
-print("DEBUG: Starting Firebase Admin SDK initialization...")
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication'
+    ],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 100
+}
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Инициализация Firebase Admin SDK
 try:
     firebase_creds_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY_JSON')
     if firebase_creds_json:
-        print("DEBUG: FIREBASE_SERVICE_ACCOUNT_KEY_JSON is SET.")
         firebase_creds_dict = json.loads(firebase_creds_json)
         cred = credentials.Certificate(firebase_creds_dict)
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
-            print("DEBUG: Firebase Admin SDK initialized successfully.")
-    else:
-        print("DEBUG: WARNING! FIREBASE_SERVICE_ACCOUNT_KEY_JSON is NOT SET.")
 except Exception as e:
-    print(f"DEBUG: FATAL ERROR during Firebase init: {e}")
-    # Вызываем исключение, чтобы контейнер точно упал с этим сообщением
-    raise e
-
-print("DEBUG: settings.py parsing finished successfully.")
+    # В production лучше использовать более продвинутое логирование
+    print(f"CRITICAL ERROR: Failed to initialize Firebase Admin SDK: {e}")
+    # Можно даже вызвать `raise e`, чтобы контейнер гарантированно не запустился с нерабочим Firebase
