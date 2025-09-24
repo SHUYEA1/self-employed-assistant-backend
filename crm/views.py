@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, APIException, AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.autoken.models import Token 
+from rest_framework.authtoken.models import Token 
 
 from firebase_admin import auth as firebase_auth
 from google_auth_oauthlib.flow import Flow
