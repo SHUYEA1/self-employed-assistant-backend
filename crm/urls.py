@@ -1,59 +1,49 @@
-# Файл: backend/crm/urls.py (Полная, очищенная версия)
+# Файл: backend/crm/urls.py (Финальная, очищенная версия)
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-
 from .views import (
-    ClientViewSet, 
-    InteractionViewSet, 
-    TransactionViewSet, 
-    TagViewSet, 
-    TimeEntryViewSet,
-    FinancialSummaryView, 
-    RegisterView,
-    GoogleCalendarInitView, 
-    GoogleCalendarRedirectView, 
-    CheckGoogleAuthView, 
-    GoogleCalendarEventListView, 
-    GoogleCalendarEventDetailView,
-    UpcomingBirthdaysView,
-    GoogleLoginView, 
-    GoogleContactsListView 
+    ClientViewSet, InteractionViewSet, TransactionViewSet, TagViewSet, TimeEntryViewSet,
+    FinancialSummaryView, RegisterView,
+    GoogleCalendarInitView, GoogleCalendarRedirectView, CheckGoogleAuthView,
+    GoogleCalendarEventListView, GoogleCalendarEventDetailView,
+    UpcomingBirthdaysView, GoogleLoginView, GoogleContactsListView,
+    GenerateInvoicePDF # Убедимся, что он импортирован
 )
 
 router = DefaultRouter()
 router.register(r'clients', ClientViewSet, basename='client')
 router.register(r'interactions', InteractionViewSet, basename='interaction')
 router.register(r'transactions', TransactionViewSet, basename='transaction')
-router.register(r'tags', TagViewSet, basename='tag')
 router.register(r'time-entries', TimeEntryViewSet, basename='timeentry')
+# Теги мы пока убрали, но эндпоинт можно оставить
+router.register(r'tags', TagViewSet, basename='tag')
 
-# Отдельная группа URL для календаря
+
 calendar_urls = [
     path('auth/status/', CheckGoogleAuthView.as_view(), name='google-auth-status'),
-    path('auth/init/', GoogleCalendarInitView.as_view(), name='google-calendar-init'),
-    path('auth/callback/', GoogleCalendarRedirectView.as_view(), name='google-calendar-callback'),
+    path('init/', GoogleCalendarInitView.as_view(), name='google-calendar-init'), # <-- Убираем лишний 'auth/'
+    path('callback/', GoogleCalendarRedirectView.as_view(), name='google-calendar-callback'), # <-- Убираем лишний 'auth/'
     path('events/', GoogleCalendarEventListView.as_view(), name='google-calendar-event-list'),
-    path('events/<str:event_id>/', GoogleCalendarEventDetailView.as_view(), name='google-calendar-event-detail'), 
+    path('events/<str:event_id>/', GoogleCalendarEventDetailView.as_view(), name='google-calendar-event-detail'),
 ]
 
-# Отдельная группа URL для аутентификации
 auth_urls = [
     path('register/', RegisterView.as_view(), name='register'),
     path('google/', GoogleLoginView.as_view(), name='google-login'),
 ]
 
-# Главный список маршрутов приложения crm
 urlpatterns = [
-    # 1. Все эндпоинты, созданные через DRF Router
-    path('', include(router.urls)), 
-    
-    # 2. Кастомные эндпоинты приложения
-    path('clients/birthdays/', UpcomingBirthdaysView.as_view(), name='upcoming-birthdays'),
+    # DRF Роутеры
+    path('', include(router.urls)),
+
+    # Кастомные эндпоинты
+    path('clients/<int:client_id>/generate-invoice/', GenerateInvoicePDF.as_view(), name='generate-invoice'),
+    path('birthdays/', UpcomingBirthdaysView.as_view(), name='upcoming-birthdays'), # Упрощенный URL
     path('finance/summary/', FinancialSummaryView.as_view(), name='finance-summary'),
     path('google/contacts/', GoogleContactsListView.as_view(), name='google-contacts-list'),
-    
-    # 3. Подключение групп URL
+
+    # Группы
     path('calendar/', include(calendar_urls)),
     path('auth/', include(auth_urls)),
 ]

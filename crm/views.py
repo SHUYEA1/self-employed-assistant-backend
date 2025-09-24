@@ -1,5 +1,3 @@
-# Файл: backend/crm/views.py (Финальная, полная версия с исправленным синтаксисом)
-
 import datetime
 from django.conf import settings
 from django.db.models import Sum, Q, F
@@ -8,7 +6,9 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import redirect
 from django.utils import timezone
 from django.utils.crypto import get_random_string
-
+from django.http import HttpResponse
+from django.template import engines
+from weasyprint import HTML
 from rest_framework import viewsets, generics, status
 from rest_framework.decorators import action
 from rest_framework.views import APIView
@@ -16,14 +16,12 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, APIException, AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token 
-
 from firebase_admin import auth as firebase_auth
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
 from .models import Client, Interaction, Transaction, GoogleCredentials, OAuthState, Tag, TimeEntry
 from .serializers import (
     ClientSerializer, InteractionSerializer, TransactionSerializer,
@@ -32,7 +30,51 @@ from .serializers import (
 
 User = get_user_model()
 
+class GenerateInvoicePDF(APIView):
+    def post(self, request, client_id, *args, **kwargs):
+        try:
+            client = Client.objects.get(id=client_id, user=request.user)
+        except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        items = request.data.get('items', [])
+        if not isinstance(items, list) or not items:
+            return Response({'error': 'Items list is required and cannot be empty.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # --- Базовая валидация и расчеты ---
+        total_amount = 0
+        for item in items:
+            try:
+                item['price'] = float(item.get('price', 0))
+                item['quantity'] = int(item.get('quantity', 1))
+                item['total'] = item['price'] * item['quantity']
+                total_amount += item['total']
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid data in items list.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- Рендеринг HTML шаблона ---
+        template_string = open('crm/templates/invoice_template.html', 'r', encoding='utf-8').read()
+        django_engine = engines['django']
+        template = django_engine.from_string(template_string)
+        
+        context = {
+            'client': client,
+            'user': request.user,
+            'items': items,
+            'total_amount': total_amount,
+            'invoice_number': f'CRM-{datetime.date.today().strftime("%y%m")}-{client.id}',
+            'generation_date': datetime.date.today().strftime('%d.%m.%Y')
+        }
+        
+        html_string = template.render(context)
+        
+        # --- Создание PDF ---
+        pdf_file = HTML(string=html_string).write_pdf()
+        
+        response = HttpResponse(pdf_file, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="invoice-{client.id}-{datetime.date.today()}.pdf"'
+        
+        return response
 class ClientViewSet(viewsets.ModelViewSet):
     serializer_class = ClientSerializer
     
