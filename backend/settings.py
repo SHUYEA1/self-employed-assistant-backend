@@ -1,23 +1,23 @@
+# Файл: backend/settings.py (Финальная версия для Cloud Run / Cloud Shell)
+
 from pathlib import Path
 import os
 import dj_database_url
-
-# --- НОВЫЕ ИМПОРТЫ ДЛЯ FIREBASE ---
 import firebase_admin
 from firebase_admin import credentials
 import json
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-super-secret-key-for-local-dev")
+SECRET_KEY = os.environ.get("SECRET_KEY") # <-- Теперь это обязательная переменная
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "t")
 
 ALLOWED_HOSTS = ["*"]
-CSRF_TRUSTED_ORIGINS = [os.environ.get('FRONTEND_URL', 'http://localhost:3000')]
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000').split(',')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
-GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/calendar/auth/callback/')
+GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -29,7 +29,7 @@ INSTALLED_APPS = [
     'crm',
     'corsheaders',
     'rest_framework',
-    'rest_framework.authtoken',
+    'rest_framework.autoken',
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -43,36 +43,42 @@ MIDDLEWARE = [
 ]
 ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
+    {'BACKEND': 'django.template.backends.django.DjangoTemplates', 'DIRS': [], 'APP_DIRS': True,
+     'OPTIONS': {'context_processors': ['django.template.context_processors.debug', 'django.template.context_processors.request', 'django.contrib.auth.context_processors.auth', 'django.contrib.messages.context_processors.messages']}}
 ]
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if DATABASE_URL:
-    DATABASES = {'default': dj_database_url.config(conn_max_age=600, ssl_require=not DEBUG)}
+# --- НОВЫЙ, УМНЫЙ КОНФИГ ДЛЯ БАЗЫ ДАННЫХ ---
+# Проверяем, запущено ли приложение в среде Google Cloud (Cloud Run, Cloud Shell)
+# В Cloud Run переменная K_SERVICE установлена автоматически.
+if os.environ.get('K_SERVICE'):
+    # Подключение для Cloud Run / Cloud Shell через UNIX socket
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'HOST': '/cloudsql/assistant-saas:europe-west4:assistant-db1', # <-- ПУТЬ К СОКЕТУ
+            'USER': 'postgres', 
+            # ВАЖНО: Пароль и имя БД теперь тоже берутся из переменных окружения
+            'PASSWORD': os.environ.get("DB_PASSWORD"), 
+            'NAME': os.environ.get("DB_NAME", "postgres"),
+        }
+    }
 else:
-    print("WARNING: DATABASE_URL not found, falling back to SQLite.")
-    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
+    # Конфигурация для локальной разработки (через localhost:5432)
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    if DATABASE_URL:
+        DATABASES = {'default': dj_database_url.config(conn_max_age=600)}
+    else:
+        # Резервный вариант для локальной работы, если ничего не настроено
+        DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
+
 
 SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = not DEBUG
-
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'}
 ]
 
 LANGUAGE_CODE = 'ru-ru'
@@ -82,42 +88,26 @@ USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# --- ЕДИНЫЙ БЛОК REST_FRAMEWORK ---
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication'
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated'
-    ]
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 100
 }
 
 CORS_ALLOW_ALL_ORIGINS = True
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.TokenAuthentication'
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated'
-    ],
-    # --- НОВЫЙ БЛОК ДЛЯ ПАГИНАЦИИ ---
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 100 # Можно выбрать любое число, 100 - хороший дефолт для списка
-}
-# --- НОВЫЙ БЛОК ДЛЯ ИНИЦИАЛИЗАЦИИ FIREBASE ADMIN SDK ---
+
+# --- БЛОК ИНИЦИАЛИЗАЦИИ FIREBASE ADMIN SDK (без изменений) ---
 try:
     firebase_creds_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY_JSON')
     if firebase_creds_json:
         firebase_creds_dict = json.loads(firebase_creds_json)
         cred = credentials.Certificate(firebase_creds_dict)
-        # Проверяем, не было ли уже инициализировано приложение
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
-            print("Firebase Admin SDK initialized successfully.")
-        else:
-            print("Firebase Admin SDK already initialized.")
-    else:
-        print("WARNING: FIREBASE_SERVICE_ACCOUNT_KEY_JSON not found. Firebase features will be disabled.")
 except Exception as e:
     print(f"ERROR: Failed to initialize Firebase Admin SDK: {e}")
