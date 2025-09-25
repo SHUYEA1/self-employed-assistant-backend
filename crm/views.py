@@ -1,4 +1,4 @@
-# Файл: backend/crm/views.py (С исправлением опечатки в импорте)
+# Файл: backend/crm/views.py (С отключенной функцией PDF)
 
 import datetime
 from django.conf import settings
@@ -17,7 +17,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, APIException, AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
-# --- ИСПРАВЛЕНИЕ ЗДЕСЬ (было autoken) ---
 from rest_framework.authtoken.models import Token 
 
 from firebase_admin import auth as firebase_auth
@@ -26,7 +25,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from weasyprint import HTML
+# from weasyprint import HTML  # <--- ЗАКОММЕНТИРОВАЛИ
 
 from .models import Client, Interaction, Transaction, GoogleCredentials, OAuthState, Tag, TimeEntry
 from .serializers import (
@@ -37,7 +36,7 @@ from .serializers import (
 User = get_user_model()
 
 
-# --- ViewSets ---
+# --- ViewSets (без изменений) ---
 
 class ClientViewSet(viewsets.ModelViewSet):
     serializer_class = ClientSerializer
@@ -57,6 +56,7 @@ class ClientViewSet(viewsets.ModelViewSet):
             serializer.fields['tag_ids'].queryset = Tag.objects.filter(user=self.request.user)
         return serializer
 
+# ... InteractionViewSet, TransactionViewSet, TagViewSet, TimeEntryViewSet без изменений ...
 class InteractionViewSet(viewsets.ModelViewSet):
     serializer_class = InteractionSerializer
     def get_queryset(self):
@@ -65,7 +65,6 @@ class InteractionViewSet(viewsets.ModelViewSet):
         if client_id:
             queryset = queryset.filter(client_id=client_id)
         return queryset.order_by('-interaction_date')
-
     def perform_create(self, serializer):
         client = serializer.validated_data.get('client')
         if client.user != self.request.user: raise PermissionDenied("...")
@@ -78,7 +77,6 @@ class TransactionViewSet(viewsets.ModelViewSet):
         client_id = self.request.query_params.get('client_id')
         if client_id: queryset = queryset.filter(client_id=client_id)
         return queryset.order_by('-transaction_date')
-
     def perform_create(self, serializer):
         client = serializer.validated_data.get('client')
         if client and client.user != self.request.user: raise PermissionDenied("...")
@@ -99,71 +97,40 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
         if client_id:
             queryset = queryset.filter(client_id=client_id)
         return queryset.order_by('-start_time')
-            
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-        
     @action(detail=False, methods=['post'], url_path='toggle-timer')
     def toggle_timer(self, request, *args, **kwargs):
         client_id = request.data.get('client_id')
         if not client_id: return Response({'error': 'client_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            client = Client.objects.get(id=client_id, user=request.user)
-        except Client.DoesNotExist:
-            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+        try: client = Client.objects.get(id=client_id, user=request.user)
+        except Client.DoesNotExist: return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
         active_timer = TimeEntry.objects.filter(user=request.user, end_time__isnull=True).first()
         if active_timer:
-            active_timer.end_time = timezone.now()
-            active_timer.save()
+            active_timer.end_time = timezone.now(); active_timer.save()
             serializer = self.get_serializer(active_timer)
             return Response({'status': 'stopped', 'entry': serializer.data})
         else:
             new_timer = TimeEntry.objects.create(user=request.user, client=client, start_time=timezone.now())
             serializer = self.get_serializer(new_timer)
             return Response({'status': 'started', 'entry': serializer.data}, status=status.HTTP_201_CREATED)
-
     @action(detail=False, methods=['get'], url_path='active-timer')
     def get_active_timer(self, request, *args, **kwargs):
         active_timer = TimeEntry.objects.filter(user=request.user, end_time__isnull=True).first()
         return Response(self.get_serializer(active_timer).data if active_timer else None)
 
-
 # --- APIViews ---
 
 class GenerateInvoicePDF(APIView):
     def post(self, request, client_id, *args, **kwargs):
-        try:
-            client = Client.objects.get(id=client_id, user=request.user)
-        except Client.DoesNotExist:
-            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+        # --- ЗАГЛУШКА ---
+        # Возвращаем ошибку, сообщая, что функция временно недоступна
+        return Response(
+            {"error": "PDF generation is temporarily disabled by the administrator."}, 
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
 
-        items = request.data.get('items', [])
-        if not isinstance(items, list) or not items:
-            return Response({'error': 'Items list is required.'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        total_amount = 0
-        for item in items:
-            try:
-                item['price'] = float(item.get('price', 0))
-                item['quantity'] = int(item.get('quantity', 1))
-                item['total'] = item['price'] * item['quantity']
-                total_amount += item['total']
-            except (ValueError, TypeError):
-                return Response({'error': 'Invalid data in items list.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        context = {
-            'client': client, 'user': request.user, 'items': items, 'total_amount': total_amount,
-            'invoice_number': f'CRM-{datetime.date.today().strftime("%y%m")}-{client.id}',
-            'generation_date': datetime.date.today().strftime('%d.%m.%Y')
-        }
-        
-        html_string = render_to_string('invoice_template.html', context)
-        pdf_file = HTML(string=html_string).write_pdf()
-        
-        response = HttpResponse(pdf_file, content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="invoice-{client.id}-{datetime.date.today()}.pdf"'
-        return response
-
+# ... GoogleLoginView, FinancialSummaryView, etc. без изменений ...
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
     def post(self, request, *args, **kwargs):
@@ -204,168 +171,81 @@ class UpcomingBirthdaysView(APIView):
         serializer = ClientSerializer(upcoming.order_by('birthday_doy'), many=True)
         return Response(serializer.data)
 
-SCOPES = [
-    'https://www.googleapis.com/auth/calendar', 
-    'https://www.googleapis.com/auth/contacts.readonly'
-]
-
+SCOPES = [ 'https://www.googleapis.com/auth/calendar',  'https://www.googleapis.com/auth/contacts.readonly']
 def get_google_flow():
-    return Flow.from_client_config(
-        client_config={
-            "web": {
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "redirect_uris": [settings.GOOGLE_REDIRECT_URI],
-            }
-        },
-        scopes=SCOPES,
-        redirect_uri=settings.GOOGLE_REDIRECT_URI
-    )
-
+    return Flow.from_client_config( client_config={ "web": { "client_id": settings.GOOGLE_CLIENT_ID, "client_secret": settings.GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "redirect_uris": [settings.GOOGLE_REDIRECT_URI], } }, scopes=SCOPES, redirect_uri=settings.GOOGLE_REDIRECT_URI)
 def _get_google_service(user, service_name, version):
     try:
         creds = GoogleCredentials.objects.get(user=user)
-        credentials = Credentials(
-            token=creds.access_token,
-            refresh_token=creds.refresh_token,
-            token_uri='https://oauth2.googleapis.com/token',
-            client_id=settings.GOOGLE_CLIENT_ID,
-            client_secret=settings.GOOGLE_CLIENT_SECRET
-        )
+        credentials = Credentials( token=creds.access_token, refresh_token=creds.refresh_token, token_uri='https://oauth2.googleapis.com/token', client_id=settings.GOOGLE_CLIENT_ID, client_secret=settings.GOOGLE_CLIENT_SECRET)
         if not credentials.valid or credentials.expired:
             try:
                 credentials.refresh(Request())
-                creds.access_token = credentials.token
-                creds.token_expiry = credentials.expiry
-                creds.save()
+                creds.access_token = credentials.token; creds.token_expiry = credentials.expiry; creds.save()
             except Exception as e:
                 raise APIException(f"Failed to refresh Google token: {e}", code=status.HTTP_401_UNAUTHORIZED)
-        
         return build(service_name, version, credentials=credentials)
     except GoogleCredentials.DoesNotExist:
         raise APIException("Google credentials not found for this user.", code=status.HTTP_401_UNAUTHORIZED)
-
 class CheckGoogleAuthView(APIView):
     def get(self, request, *args, **kwargs):
         is_authenticated = GoogleCredentials.objects.filter(user=request.user).exists()
         return Response({'isAuthenticated': is_authenticated})
-
 class GoogleCalendarInitView(APIView):
     def get(self, request, *args, **kwargs):
         flow = get_google_flow()
         state = get_random_string(length=32)
         OAuthState.objects.create(user=request.user, state=state)
-        authorization_url, _ = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            state=state,
-            prompt='consent'
-        )
+        authorization_url, _ = flow.authorization_url( access_type='offline', include_granted_scopes='true', state=state, prompt='consent')
         return Response({'authorization_url': authorization_url})
-
 class GoogleCalendarRedirectView(APIView):
     permission_classes = [AllowAny]
     def get(self, request, *args, **kwargs):
         state = request.query_params.get('state')
         try:
             oauth_state_obj = OAuthState.objects.get(state=state)
-            user = oauth_state_obj.user
-            oauth_state_obj.delete() 
-
-            flow = get_google_flow()
-            flow.fetch_token(code=request.query_params.get('code'))
-            
+            user = oauth_state_obj.user; oauth_state_obj.delete() 
+            flow = get_google_flow(); flow.fetch_token(code=request.query_params.get('code'))
             credentials = flow.credentials
-            GoogleCredentials.objects.update_or_create(
-                user=user,
-                defaults={
-                    'access_token': credentials.token,
-                    'refresh_token': credentials.refresh_token,
-                    'token_expiry': credentials.expiry
-                }
-            )
+            GoogleCredentials.objects.update_or_create( user=user, defaults={ 'access_token': credentials.token, 'refresh_token': credentials.refresh_token, 'token_expiry': credentials.expiry})
             return redirect(settings.FRONTEND_URL + '/calendar')
         except OAuthState.DoesNotExist:
             return redirect(settings.FRONTEND_URL + '/calendar?error=invalid_state')
-
 class GoogleContactsListView(APIView):
     def get(self, request, *args, **kwargs):
         try:
             service = _get_google_service(request.user, 'people', 'v1')
-            results = service.people().connections().list(
-                resourceName='people/me',
-                personFields='names,emailAddresses,phoneNumbers',
-                pageSize=500
-            ).execute()
+            results = service.people().connections().list( resourceName='people/me', personFields='names,emailAddresses,phoneNumbers', pageSize=500).execute()
             connections = results.get('connections', [])
-            
             contact_list = []
             for person in connections:
                 contact = {}
-                names = person.get('names', [])
-                emails = person.get('emailAddresses', [])
-                phones = person.get('phoneNumbers', [])
-                
-                if names: contact['name'] = names[0].get('displayName')
-                if emails: contact['email'] = emails[0].get('value')
-                if phones: contact['phone'] = phones[0].get('value')
-
+                if names := person.get('names', []): contact['name'] = names[0].get('displayName')
+                if emails := person.get('emailAddresses', []): contact['email'] = emails[0].get('value')
+                if phones := person.get('phoneNumbers', []): contact['phone'] = phones[0].get('value')
                 if 'name' in contact: contact_list.append(contact)
-                    
             return Response(contact_list)
         except HttpError as e:
             raise APIException(f"Google API Error: {e.reason}", code=e.status_code)
-
 class GoogleCalendarEventListView(APIView):
     def get(self, request, *args, **kwargs):
         service = _get_google_service(request.user, 'calendar', 'v3')
-        start = request.query_params.get('start')
-        end = request.query_params.get('end')
-        
-        events_result = service.events().list(
-            calendarId='primary', 
-            timeMin=start, 
-            timeMax=end,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
-        
+        start, end = request.query_params.get('start'), request.query_params.get('end')
+        events_result = service.events().list( calendarId='primary',  timeMin=start,  timeMax=end, singleEvents=True, orderBy='startTime').execute()
         events = events_result.get('items', [])
-        formatted_events = [{
-            'id': e['id'],
-            'title': e.get('summary', 'Без названия'),
-            'start': e['start'].get('dateTime', e['start'].get('date')),
-            'end': e['end'].get('dateTime', e['end'].get('date')),
-            'extendedProps': {'description': e.get('description', '')}
-        } for e in events]
+        formatted_events = [{'id': e['id'], 'title': e.get('summary', 'Без названия'), 'start': e['start'].get('dateTime', e['start'].get('date')), 'end': e['end'].get('dateTime', e['end'].get('date')), 'extendedProps': {'description': e.get('description', '')} } for e in events]
         return Response(formatted_events)
-
     def post(self, request, *args, **kwargs):
         service = _get_google_service(request.user, 'calendar', 'v3')
-        event_data = {
-            'summary': request.data.get('title'),
-            'description': request.data.get('description'),
-            'start': {'dateTime': request.data.get('start'), 'timeZone': 'UTC'},
-            'end': {'dateTime': request.data.get('end'), 'timeZone': 'UTC'},
-        }
+        event_data = { 'summary': request.data.get('title'), 'description': request.data.get('description'), 'start': {'dateTime': request.data.get('start'), 'timeZone': 'UTC'}, 'end': {'dateTime': request.data.get('end'), 'timeZone': 'UTC'}, }
         event = service.events().insert(calendarId='primary', body=event_data).execute()
         return Response(event, status=status.HTTP_201_CREATED)
-
 class GoogleCalendarEventDetailView(APIView):
     def put(self, request, event_id, *args, **kwargs):
         service = _get_google_service(request.user, 'calendar', 'v3')
-        event_data = {
-            'summary': request.data.get('title'),
-            'description': request.data.get('description'),
-            'start': {'dateTime': request.data.get('start'), 'timeZone': 'UTC'},
-            'end': {'dateTime': request.data.get('end'), 'timeZone': 'UTC'},
-        }
+        event_data = { 'summary': request.data.get('title'), 'description': request.data.get('description'), 'start': {'dateTime': request.data.get('start'), 'timeZone': 'UTC'}, 'end': {'dateTime': request.data.get('end'), 'timeZone': 'UTC'}, }
         event = service.events().update(calendarId='primary', eventId=event_id, body=event_data).execute()
         return Response(event)
-
     def delete(self, request, event_id, *args, **kwargs):
         service = _get_google_service(request.user, 'calendar', 'v3')
         service.events().delete(calendarId='primary', eventId=event_id).execute()
