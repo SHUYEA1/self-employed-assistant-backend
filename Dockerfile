@@ -1,7 +1,8 @@
-# Dockerfile на основе официальной документации WeasyPrint (ИСПРАВЛЕННЫЙ)
+# Файл: backend/Dockerfile (ИСПРАВЛЕННАЯ ВЕРСИЯ С BULLSEYE)
 
 # --- ЭТАП СБОРКИ ---
-FROM debian:bookworm-slim as builder
+# ИЗМЕНЕНИЕ 1: Используем стабильную и проверенную версию Debian "Bullseye"
+FROM debian:bullseye-slim as builder
 
 # Устанавливаем ВСЕ системные зависимости, необходимые для WeasyPrint И VENV
 RUN apt-get update && \
@@ -13,7 +14,6 @@ RUN apt-get update && \
     python3-wheel \
     python3-cffi \
     python3-venv \
-    # <--- ВОТ НЕДОСТАЮЩИЙ ПАКЕТ
     libcairo2-dev \
     libpango1.0-dev \
     libgdk-pixbuf2.0-dev \
@@ -27,11 +27,14 @@ ENV PATH="/venv/bin:$PATH"
 
 # Копируем и устанавливаем Python-зависимости
 COPY requirements.txt .
+# Обновляем pip перед установкой, чтобы избежать потенциальных проблем
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 
 # --- ЭТАП РАБОТЫ (ФИНАЛЬНЫЙ КОНТЕЙНЕР) ---
-FROM debian:bookworm-slim
+# ИЗМЕНЕНИЕ 2: Здесь тоже используем "Bullseye" для консистентности
+FROM debian:bullseye-slim
 
 # Устанавливаем только РАБОЧИЕ системные зависимости
 RUN apt-get update && \
@@ -41,7 +44,8 @@ RUN apt-get update && \
     libcairo2 \
     libpango1.0-0 \
     libgdk-pixbuf2.0-0 \
-    libffi8 \
+    # В Bullseye эта библиотека называется libffi7
+    libffi7 \
     shared-mime-info \
     fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
