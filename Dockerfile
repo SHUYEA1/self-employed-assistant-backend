@@ -1,19 +1,19 @@
-# Файл: backend/Dockerfile (ФИНАЛЬНАЯ ВЕРСИЯ)
+# Файл: backend/Dockerfile (ФИНАЛЬНАЯ НАДЕЖНАЯ ВЕРСИЯ)
 
 # --- ЭТАП СБОРКИ ---
+# Используем стабильную и проверенную версию Debian "Bullseye"
 FROM debian:bullseye-slim as builder
 
-# Устанавливаем ВСЕ системные зависимости
-# --- ИЗМЕНЕНИЕ: Явно указываем python3.11 для установки ---
+# Устанавливаем системные зависимости с дефолтной версией Python 3
 RUN apt-get update && \
     apt-get install -y \
     build-essential \
-    python3.11-dev \
-    python3.11-venv \
+    python3-dev \
     python3-pip \
     python3-setuptools \
     python3-wheel \
     python3-cffi \
+    python3-venv \
     libcairo2-dev \
     libpango1.0-dev \
     libgdk-pixbuf2.0-dev \
@@ -21,8 +21,8 @@ RUN apt-get update && \
     shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
-# Создаем виртуальное окружение с помощью python3.11
-RUN python3.11 -m venv /venv
+# Создаем виртуальное окружение с дефолтным python3 (который 3.9)
+RUN python3 -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
 # Копируем и устанавливаем Python-зависимости
@@ -32,13 +32,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 
 # --- ЭТАП РАБОТЫ (ФИНАЛЬНЫЙ КОНТЕЙНЕР) ---
+# Здесь тоже используем "Bullseye"
 FROM debian:bullseye-slim
 
 # Устанавливаем РАБОЧИЕ системные зависимости
-# --- ИЗМЕНЕНИЕ: Указываем python3.11 для работы ---
 RUN apt-get update && \
     apt-get install -y \
-    python3.11 \
+    python3 \
     python3-cffi \
     libcairo2 \
     libpango1.0-0 \
