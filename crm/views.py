@@ -1,4 +1,4 @@
-# Файл: backend/crm/views.py (Полностью исправленная версия с логикой Google)
+# Файл: backend/crm/views.py (С исправлением опечатки в импорте)
 
 import datetime
 from django.conf import settings
@@ -17,7 +17,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, APIException, AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.autoken.models import Token 
+# --- ИСПРАВЛЕНИЕ ЗДЕСЬ (было autoken) ---
+from rest_framework.authtoken.models import Token 
 
 from firebase_admin import auth as firebase_auth
 from google_auth_oauthlib.flow import Flow
@@ -36,7 +37,7 @@ from .serializers import (
 User = get_user_model()
 
 
-# --- ViewSets (без изменений) ---
+# --- ViewSets ---
 
 class ClientViewSet(viewsets.ModelViewSet):
     serializer_class = ClientSerializer
@@ -100,7 +101,7 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
         return queryset.order_by('-start_time')
             
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user) # Разрешаем создавать завершенные таймеры
+        serializer.save(user=self.request.user)
         
     @action(detail=False, methods=['post'], url_path='toggle-timer')
     def toggle_timer(self, request, *args, **kwargs):
@@ -127,10 +128,9 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(active_timer).data if active_timer else None)
 
 
-# --- APIViews (остальные) ---
+# --- APIViews ---
 
 class GenerateInvoicePDF(APIView):
-    # Эта View теперь будет работать, когда мы добавим шаблон
     def post(self, request, client_id, *args, **kwargs):
         try:
             client = Client.objects.get(id=client_id, user=request.user)
@@ -204,24 +204,28 @@ class UpcomingBirthdaysView(APIView):
         serializer = ClientSerializer(upcoming.order_by('birthday_doy'), many=True)
         return Response(serializer.data)
 
-
-# --- НОВЫЙ БЛОК: ПОЛНАЯ РЕАЛИЗАЦАЯ ЛОГИКИ GOOGLE ---
-
 SCOPES = [
     'https://www.googleapis.com/auth/calendar', 
     'https://www.googleapis.com/auth/contacts.readonly'
 ]
 
 def get_google_flow():
-    """Создает и возвращает экземпляр Flow для OAuth."""
-    return Flow.from_client_secrets_file(
-        settings.GOOGLE_CLIENT_SECRETS_FILE, # <-- Убедись, что этот путь прописан в settings.py
+    return Flow.from_client_config(
+        client_config={
+            "web": {
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "redirect_uris": [settings.GOOGLE_REDIRECT_URI],
+            }
+        },
         scopes=SCOPES,
         redirect_uri=settings.GOOGLE_REDIRECT_URI
     )
 
 def _get_google_service(user, service_name, version):
-    """Вспомогательная функция для получения Google API service."""
     try:
         creds = GoogleCredentials.objects.get(user=user)
         credentials = Credentials(
@@ -245,13 +249,11 @@ def _get_google_service(user, service_name, version):
         raise APIException("Google credentials not found for this user.", code=status.HTTP_401_UNAUTHORIZED)
 
 class CheckGoogleAuthView(APIView):
-    """Проверяет, есть ли у пользователя действительные учетные данные Google."""
     def get(self, request, *args, **kwargs):
         is_authenticated = GoogleCredentials.objects.filter(user=request.user).exists()
         return Response({'isAuthenticated': is_authenticated})
 
 class GoogleCalendarInitView(APIView):
-    """Инициирует процесс авторизации Google."""
     def get(self, request, *args, **kwargs):
         flow = get_google_flow()
         state = get_random_string(length=32)
@@ -260,19 +262,18 @@ class GoogleCalendarInitView(APIView):
             access_type='offline',
             include_granted_scopes='true',
             state=state,
-            prompt='consent' # Важно для получения refresh_token
+            prompt='consent'
         )
         return Response({'authorization_url': authorization_url})
 
 class GoogleCalendarRedirectView(APIView):
-    """Обрабатывает редирект от Google после авторизации."""
     permission_classes = [AllowAny]
     def get(self, request, *args, **kwargs):
         state = request.query_params.get('state')
         try:
             oauth_state_obj = OAuthState.objects.get(state=state)
             user = oauth_state_obj.user
-            oauth_state_obj.delete() # State используется один раз
+            oauth_state_obj.delete() 
 
             flow = get_google_flow()
             flow.fetch_token(code=request.query_params.get('code'))
@@ -291,7 +292,6 @@ class GoogleCalendarRedirectView(APIView):
             return redirect(settings.FRONTEND_URL + '/calendar?error=invalid_state')
 
 class GoogleContactsListView(APIView):
-    """Получает список контактов Google."""
     def get(self, request, *args, **kwargs):
         try:
             service = _get_google_service(request.user, 'people', 'v1')
@@ -320,7 +320,6 @@ class GoogleContactsListView(APIView):
             raise APIException(f"Google API Error: {e.reason}", code=e.status_code)
 
 class GoogleCalendarEventListView(APIView):
-    """Получает или создает события в календаре."""
     def get(self, request, *args, **kwargs):
         service = _get_google_service(request.user, 'calendar', 'v3')
         start = request.query_params.get('start')
@@ -356,7 +355,6 @@ class GoogleCalendarEventListView(APIView):
         return Response(event, status=status.HTTP_201_CREATED)
 
 class GoogleCalendarEventDetailView(APIView):
-    """Обновляет или удаляет конкретное событие."""
     def put(self, request, event_id, *args, **kwargs):
         service = _get_google_service(request.user, 'calendar', 'v3')
         event_data = {
