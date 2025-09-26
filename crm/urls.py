@@ -8,6 +8,7 @@ from .views import (
     GoogleCalendarInitView, GoogleCalendarRedirectView, CheckGoogleAuthView,
     GoogleCalendarEventListView, GoogleCalendarEventDetailView,
     UpcomingBirthdaysView, GoogleLoginView, GoogleContactsListView,
+    WhoAmI,
     # GenerateInvoicePDF removed
 )
 
@@ -31,6 +32,7 @@ calendar_urls = [
 auth_urls = [
     path('register/', RegisterView.as_view(), name='register'),
     path('google/', GoogleLoginView.as_view(), name='google-login'),
+    path('whoami/', WhoAmI.as_view(), name='whoami'),
 ]
 
 urlpatterns = [

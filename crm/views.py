@@ -20,6 +20,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token 
 
 from firebase_admin import auth as firebase_auth
+import os
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -135,10 +136,54 @@ class GoogleLoginView(APIView):
             email = decoded_token.get('email')
             if not email: return Response({"error": "Email not found in Firebase token."}, status=status.HTTP_400_BAD_REQUEST)
             user, created = User.objects.get_or_create(username=email, defaults={'email': email})
-            if created: user.set_unusable_password(); user.save()
+            if created:
+                user.set_unusable_password()
+                user.save()
+                logger.info(f"Created new user via GoogleLogin: {user.username}")
+            else:
+                logger.info(f"Existing user logged in via Google: {user.username}")
+
             drf_token, _ = Token.objects.get_or_create(user=user)
-            return Response({'token': drf_token.key}, status=status.HTTP_200_OK)
+            # Return token plus minimal user info to make frontend integration simpler
+            return Response({
+                'token': drf_token.key,
+                'user': {
+                    'id': user.pk,
+                    'username': user.username,
+                    'email': getattr(user, 'email', None),
+                    'created': created,
+                }
+            }, status=status.HTTP_200_OK)
         except Exception as e:
+            # Log full exception for easier debugging in production logs
+            logger.exception("GoogleLogin failed during token verification or user creation")
+            # Fallback: if a GLOBAL_API_TOKEN is configured and the request provided
+            # that token in Authorization header, allow creating/returning a DRF token
+            # for the email passed in the request body. This enables a single-machine
+            # token approach where the frontend can send the global token instead of
+            # a Firebase id_token.
+            try:
+                auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+                parts = auth_header.split()
+                if len(parts) == 2 and parts[0].lower() == 'token':
+                    provided = parts[1]
+                    env_token = os.environ.get('GLOBAL_API_TOKEN')
+                    if env_token and provided == env_token:
+                        # Expect frontend to pass 'email' in body when using global token
+                        email = request.data.get('email')
+                        if not email:
+                            raise AuthenticationFailed('Global token provided but email missing in request body')
+                        user, created = User.objects.get_or_create(username=email, defaults={'email': email})
+                        if created:
+                            user.set_unusable_password(); user.save(); logger.info(f"Created new user via global token: {user.username}")
+                        drf_token, _ = Token.objects.get_or_create(user=user)
+                        return Response({'token': drf_token.key, 'user': {'id': user.pk, 'username': user.username, 'email': getattr(user, 'email', None), 'created': created}}, status=status.HTTP_200_OK)
+            except AuthenticationFailed:
+                raise
+            except Exception:
+                # If the fallback also fails, return the original authentication failure
+                raise AuthenticationFailed(f"Invalid Firebase token: {e}")
+            # If no valid global token fallback, raise AuthenticationFailed
             raise AuthenticationFailed(f"Invalid Firebase token: {e}")
 
 class FinancialSummaryView(APIView):
@@ -152,6 +197,14 @@ class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
     permission_classes = (AllowAny,)
     serializer_class = RegisterSerializer
+
+
+class WhoAmI(APIView):
+    """Simple endpoint to verify token works and return current user info."""
+    permission_classes = [IsAuthenticated]
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        return Response({'id': user.pk, 'username': user.username, 'email': getattr(user, 'email', None)})
 
 class UpcomingBirthdaysView(APIView):
     def get(self, request, *args, **kwargs):
