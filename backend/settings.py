@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken', # Была опечатка autoken, исправлено
+        'tracker',
 ]
 
 MIDDLEWARE = [

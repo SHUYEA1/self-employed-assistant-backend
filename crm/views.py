@@ -25,8 +25,6 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-# from weasyprint import HTML  # <--- ЗАКОММЕНТИРОВАЛИ
-
 from .models import Client, Interaction, Transaction, GoogleCredentials, OAuthState, Tag, TimeEntry
 from .serializers import (
     ClientSerializer, InteractionSerializer, TransactionSerializer,
@@ -34,6 +32,9 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # --- ViewSets (без изменений) ---
@@ -121,14 +122,7 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
 
 # --- APIViews ---
 
-class GenerateInvoicePDF(APIView):
-    def post(self, request, client_id, *args, **kwargs):
-        # --- ЗАГЛУШКА ---
-        # Возвращаем ошибку, сообщая, что функция временно недоступна
-        return Response(
-            {"error": "PDF generation is temporarily disabled by the administrator."}, 
-            status=status.HTTP_503_SERVICE_UNAVAILABLE
-        )
+# Invoice generation removed
 
 # ... GoogleLoginView, FinancialSummaryView, etc. без изменений ...
 class GoogleLoginView(APIView):

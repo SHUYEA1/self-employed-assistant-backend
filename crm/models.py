@@ -79,10 +79,27 @@ class Interaction(models.Model):
         EMAIL = 'MAIL', 'Email'
         OTHER = 'OTHR', 'Другое'
 
+    # --- НОВЫЙ КЛАСС ДЛЯ СТАТУСОВ SLA ---
+    class SLAStatus(models.TextChoices):
+        PENDING = 'PEND', 'Ожидает'
+        IN_PROGRESS = 'INP', 'В работе'
+        COMPLETED = 'COMP', 'Выполнено'
+        OVERDUE = 'OVRD', 'Просрочено'
+
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='interactions', verbose_name="Клиент")
     interaction_type = models.CharField(max_length=4, choices=InteractionType.choices, default=InteractionType.CALL, verbose_name="Тип взаимодействия")
     interaction_date = models.DateTimeField(default=timezone.now, verbose_name="Дата взаимодействия")
     description = models.TextField(verbose_name="Описание")
+
+    # --- НОВЫЕ ПОЛЯ ДЛЯ SLA ---
+    due_date = models.DateTimeField(blank=True, null=True, verbose_name="Срок выполнения")
+    status = models.CharField(
+        max_length=4,
+        choices=SLAStatus.choices,
+        default=SLAStatus.PENDING,
+        verbose_name="Статус SLA"
+    )
+    completed_at = models.DateTimeField(blank=True, null=True, verbose_name="Дата фактического выполнения")
 
     def __str__(self):
         return f"{self.get_interaction_type_display()} с {self.client.name}"

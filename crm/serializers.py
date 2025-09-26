@@ -60,7 +60,10 @@ class ClientSerializer(serializers.ModelSerializer):
 class InteractionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Interaction
-        fields = '__all__'
+        fields = [
+            'id', 'client', 'interaction_type', 'interaction_date', 'description',
+            'due_date', 'status', 'completed_at'
+        ]
 
 
 class TransactionSerializer(serializers.ModelSerializer):

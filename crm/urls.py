@@ -8,7 +8,7 @@ from .views import (
     GoogleCalendarInitView, GoogleCalendarRedirectView, CheckGoogleAuthView,
     GoogleCalendarEventListView, GoogleCalendarEventDetailView,
     UpcomingBirthdaysView, GoogleLoginView, GoogleContactsListView,
-    GenerateInvoicePDF # Убедимся, что он импортирован
+    # GenerateInvoicePDF removed
 )
 
 router = DefaultRouter()
@@ -36,9 +36,11 @@ auth_urls = [
 urlpatterns = [
     # DRF Роутеры
     path('', include(router.urls)),
+    # Tracker endpoints (simple Jira-like tracker)
+    path('tracker/', include('tracker.urls')),
 
     # Кастомные эндпоинты
-    path('clients/<int:client_id>/generate-invoice/', GenerateInvoicePDF.as_view(), name='generate-invoice'),
+    # Invoice generation endpoint removed
     path('birthdays/', UpcomingBirthdaysView.as_view(), name='upcoming-birthdays'), # Упрощенный URL
     path('finance/summary/', FinancialSummaryView.as_view(), name='finance-summary'),
     path('google/contacts/', GoogleContactsListView.as_view(), name='google-contacts-list'),
